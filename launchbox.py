@@ -71,12 +71,20 @@ try:
 			#get launch data
 			if(loopCount == 0):
 				response = json.load(urllib2.urlopen("https://launchlibrary.net/1.2/launch/next/1"))
-				launchName = response["launches"][0]["name"]
-				launchTime = dateutil.parser.parse(response["launches"][0]["windowstart"])
+               		        space = " "
+				launchName = response["launches"][0]["name"] + space
+           			launchSite = response["launches"][0]["location"]
+                		launchSite1 = launchSite["name"] + space
+				launchTime = dateutil.parser.parse(response["launches"][0]["net"])
 				lcd.clear()
 
-			currentTime = datetime.utcnow().replace(tzinfo=pytz.utc)
-			diff = launchTime - currentTime
+	    		currentTime = datetime.utcnow().replace(tzinfo=pytz.utc)
+			
+          		  if(launchTime < currentTime):
+              			  diff = currentTime - launchTime
+			  else:
+				  diff = launchTime - currentTime
+
 			hours = int(diff.seconds / 3600) % 24
 			minutes = int(diff.seconds / 60) % 60
 			seconds = diff.seconds % 60
@@ -84,9 +92,16 @@ try:
 			#use a fancy string slicing trick to get the name to scroll
 			#note the magic number 20 because the display has 20 columns
 			launchNameText = launchName[scrollStart % (len(launchName) - 20) : scrollStart % len(launchName) + 20]
+           	        launchSiteText = launchSite1[scrollStart % (len(launchSite1) - 20) : scrollStart % len(launchSite1) + 20]
 			WriteLCDLine1(launchNameText[:20])
-			WriteLCDLine2(launchTime.strftime("%m/%d/%y %H:%M:%SUTC"))
-			WriteLCDLine3("{0}d {1}h {2}m {3}s ".format(diff.days, hours, minutes, seconds))
+           	        WriteLCDLine2(launchSiteText[:20])
+          	        WriteLCDLine3(launchTime.strftime("%m/%d/%y %H:%M:%SUTC"))
+            
+          	        if(launchTime < currentTime):
+             		         WriteLCDLine4("T+{0}d {1}h {2}m {3}s ".format(diff.days, hours, minutes, seconds))
+         	        else:
+             		         WriteLCDLine4("T-{0}d {1}h {2}m {3}s ".format(diff.days, hours, minutes, seconds))
+                
 			scrollStart += 1
 			loopCount += 1
 
@@ -104,4 +119,4 @@ try:
 
 except KeyboardInterrupt:
 	sys.exit()
-
+	
