@@ -3,17 +3,23 @@ import os
 import sys
 import math
 from datetime import datetime
+from datetime import timedelta
 import RPi.GPIO as GPIO
 import time
 import json
 import urllib2
 import dateutil.parser
 import pytz
+import serial
+
 from pushbullet import Pushbullet
 sys.path.append("/home/pi/Desktop/launchbox/Adafruit_CharLCD")
 from Adafruit_CharLCD import Adafruit_CharLCD
 
 PUSHBULLET_API_KEY = "<YOUR API KEY>"
+usbSerial = serial.Serial( "/dev/ttyACM0", 9600 )
+
+launchCommandHold = 0
 
 def WriteLCDLine1(message):
     lcd.setCursor(0,0)
@@ -70,7 +76,9 @@ try:
 		try:
 			#get launch data
 			if(loopCount == 0):
-				response = json.load(urllib2.urlopen("https://launchlibrary.net/1.2/launch/next/1"))
+				#use the line below to force the next launch to be at T-10 secs
+				#response = json.load(urllib2.urlopen("https://launchlibrary.net/1.3/launch/next/1?fakenet=14390"))
+				response = json.load(urllib2.urlopen("https://launchlibrary.net/1.3/launch/next/1"))
 				space = " "
 				launchName = response["launches"][0]["name"] + space
 				launchSite = response["launches"][0]["location"]
@@ -84,15 +92,33 @@ try:
 				diff = currentTime - launchTime
 			else:
 				diff = launchTime - currentTime
-
+				
+			#if it's t-0, send launch command to arduino
+			#we use the launchCommandHold variable to ensure we don't send two
+			#launch commands in a row. This can happen because of the way timestamps work,
+			#so we just put a 5 second hold on sending the command to ensure it's not sent
+			#twice
+			if(diff.seconds == 0 and launchCommandHold == 0):
+				launchCommandHold = 5
+				usbSerial.write( "launch" )
+				
+			if(launchCommandHold > 0):
+				launchCommandHold -= 1
+			
 			hours = int(diff.seconds / 3600) % 24
 			minutes = int(diff.seconds / 60) % 60
 			seconds = diff.seconds % 60
 
 			#use a fancy string slicing trick to get the name to scroll
 			#note the magic number 20 because the display has 20 columns
-			launchNameText = launchName[scrollStart % (len(launchName) - 20) : scrollStart % len(launchName) + 20]
-			launchSiteText = launchSite1[scrollStart % (len(launchSite1) - 20) : scrollStart % len(launchSite1) + 20]
+			if(len(launchName) < 21):
+				launchNameText = launchName
+			else:
+				launchNameText = launchName[scrollStart % (len(launchName) - 20) : scrollStart % len(launchName) + 20]
+			if(len (launchSite1) < 21):
+				launchSiteText = launchSite1
+			else:	
+				launchSiteText = launchSite1[scrollStart % (len(launchSite1) - 20) : scrollStart % len(launchSite1) + 20]
 			WriteLCDLine1(launchNameText[:20])
 			WriteLCDLine2(launchSiteText[:20])
 			WriteLCDLine3(launchTime.strftime("%m/%d/%y %H:%M:%SUTC"))
@@ -114,10 +140,9 @@ try:
 				loopCount = 0
 		except:
 			WriteLCDLine1("Exception occured")
-
+			print "Exception: ", sys.exc_info()[0] 
 		time.sleep(1)
 
 except KeyboardInterrupt:
 	sys.exit()
-	
 	
